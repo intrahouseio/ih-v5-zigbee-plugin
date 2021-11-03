@@ -1,4 +1,4 @@
-//const plugin = require('ih-plugin-api')();
+const plugin = require('ih-plugin-api')();
 
 let controller;
 
@@ -42,6 +42,7 @@ class MQTT {
         Object
           .keys(msg)
           .forEach(key => {
+            plugin.log('zigbee/' + topic + '/' + key + ' ' + msg[key])
             console.log('zigbee/' + topic + '/' + key + ' ' + msg[key]);
           })
       } else {
