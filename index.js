@@ -66,7 +66,7 @@ class MQTT {
         }
 
         if (topic === 'bridge/event' && msg.type !== undefined) {
-          console.log(msg.type)
+          plugin.log(msg.type)
         }
       }    
     } catch {
@@ -81,6 +81,8 @@ class MQTT {
       });
   
       this.onMessage(topic, payload)
+    } else {
+      plugin.log(payload);
     }
 
     return Promise.resolve();
