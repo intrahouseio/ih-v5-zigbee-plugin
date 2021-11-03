@@ -1,0 +1,11 @@
+{
+  "id": "zigbee",
+  "description": "Zigbee Plugin",
+  "module": "index.js",
+  "single": 1,
+  "nochannels": 1,
+  "chdefault": {
+  },
+  "ext": [
+  ]
+}
