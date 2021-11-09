@@ -1,6 +1,6 @@
 {
     "id":"zigbee",
-    "description":"Zigbee Plugin,
+    "description":"Zigbee Plugin",
     "activation": false,
     "resources": false,
     "cross": true,
