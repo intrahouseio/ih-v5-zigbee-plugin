@@ -1,10 +1,10 @@
 homeassistant: false
-permit_join: true
+permit_join: false
 mqtt:
   base_topic: zigbee2mqtt
   server: mqtt://localhost
 serial:
-  port: /dev/ttyUSB0
+  port: /dev/tty.usbserial-0001
 advanced:
   cache_state: false
   cache_state_persistent: false
@@ -13,3 +13,8 @@ advanced:
   legacy_api: false
 device_options:
   legacy: false
+devices:
+  '0x00158d00054ab741':
+    friendly_name: '0x00158d00054ab741'
+  '0x00158d00016c3dea':
+    friendly_name: '0x00158d00016c3dea'

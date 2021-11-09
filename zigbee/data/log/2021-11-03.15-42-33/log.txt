@@ -1,0 +1,12 @@
+info  2021-11-03 15:42:34: Logging to console and directory: '/Users/artemivanov/Documents/intra/ih-v5-zigbee-plugin/zigbee/data/log/2021-11-03.15-42-33' filename: log.txt
+info  2021-11-03 15:42:34: Starting Zigbee2MQTT version 1.22.0 (commit #d5c1031)
+info  2021-11-03 15:42:34: Starting zigbee-herdsman (0.13.164)
+info  2021-11-03 15:42:35: zigbee-herdsman started (resumed)
+info  2021-11-03 15:42:35: Coordinator firmware version: '{"meta":{"maintrel":1,"majorrel":2,"minorrel":7,"product":1,"revision":20210218,"transportrev":2},"type":"zStack3x0"}'
+info  2021-11-03 15:42:35: Currently 1 devices are joined:
+info  2021-11-03 15:42:35: 0x00158d00054ab741 (0x00158d00054ab741): QBKG22LM - Xiaomi Aqara D1 2 gang smart wall switch (no neutral wire) (EndDevice)
+warn  2021-11-03 15:42:35: `permit_join` set to  `true` in configuration.yaml.
+warn  2021-11-03 15:42:35: Allowing new devices to join.
+warn  2021-11-03 15:42:35: Set `permit_join` to `false` once you joined all devices.
+info  2021-11-03 15:42:35: Zigbee: allowing new devices to join.
+warn  2021-11-03 15:42:35: Using experimental new availability feature

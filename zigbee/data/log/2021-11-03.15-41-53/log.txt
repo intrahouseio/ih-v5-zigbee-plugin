@@ -1,0 +1,16 @@
+info  2021-11-03 15:41:54: Logging to console and directory: '/Users/artemivanov/Documents/intra/ih-v5-zigbee-plugin/zigbee/data/log/2021-11-03.15-41-53' filename: log.txt
+info  2021-11-03 15:41:55: Starting Zigbee2MQTT version 1.22.0 (commit #d5c1031)
+info  2021-11-03 15:41:55: Starting zigbee-herdsman (0.13.164)
+info  2021-11-03 15:42:06: zigbee-herdsman started (resumed)
+info  2021-11-03 15:42:06: Coordinator firmware version: '{"meta":{"maintrel":1,"majorrel":2,"minorrel":7,"product":1,"revision":20210218,"transportrev":2},"type":"zStack3x0"}'
+info  2021-11-03 15:42:06: Currently 1 devices are joined:
+info  2021-11-03 15:42:06: 0x00158d00054ab741 (0x00158d00054ab741): Not supported (Router)
+warn  2021-11-03 15:42:06: `permit_join` set to  `true` in configuration.yaml.
+warn  2021-11-03 15:42:06: Allowing new devices to join.
+warn  2021-11-03 15:42:06: Set `permit_join` to `false` once you joined all devices.
+info  2021-11-03 15:42:06: Zigbee: allowing new devices to join.
+warn  2021-11-03 15:42:06: Using experimental new availability feature
+info  2021-11-03 15:42:08: Successfully interviewed '0x00158d00054ab741', device has successfully been paired
+info  2021-11-03 15:42:08: Device '0x00158d00054ab741' is supported, identified as: Xiaomi Aqara D1 2 gang smart wall switch (no neutral wire) (QBKG22LM)
+info  2021-11-03 15:42:08: Configuring '0x00158d00054ab741'
+info  2021-11-03 15:42:08: Successfully configured '0x00158d00054ab741'

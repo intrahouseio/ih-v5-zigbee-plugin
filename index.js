@@ -1,8 +1,13 @@
+const util = require('util');
+
 const plugin = require('ih-plugin-api')();
+const Scanner = require('./lib/scanner');
 
 let controller;
+let scanner;
+let devices = {};
 
-async function stop(reason=null) {
+async function stop(reason = null) {
   await controller.stop(reason);
 }
 
@@ -17,12 +22,10 @@ async function exit(code, reason) {
   }
 }
 
-
 class MQTT {
-
   constructor(type, eventBus) {
     this.type = type;
-    this.eventBus = eventBus
+    this.eventBus = eventBus;
   }
 
   connect() {
@@ -39,48 +42,50 @@ class MQTT {
       const msg = JSON.parse(payload);
 
       if (this.type === 'main') {
-        Object
-          .keys(msg)
-          .forEach(key => {
-            plugin.log('zigbee/' + topic + '/' + key + ' ' + msg[key])
-            console.log('zigbee/' + topic + '/' + key + ' ' + msg[key]);
-          })
+        Object.keys(msg).forEach(key => {
+          console.log('zigbee/' + topic + '/' + key + ' ' + msg[key]);
+          plugin.sendData([{ id: topic + '_' + key, value: msg[key] }]);
+          if (scanner.status > 0) {
+            if (devices[topic]) {
+              scanner.process(devices[topic], key, msg[key]);
+            } else {
+              plugin.log('Not found device ' + topic + ' devices=' + util.inspect(devices));
+            }
+          }
+        });
       } else {
         if (topic === 'bridge/devices') {
           msg.forEach(item => {
             if (true) {
               const device = {
+                id: item.ieee_address,
+                title: item.model_id,
                 ieee_address: item.ieee_address,
                 manufacturer: item.manufacturer,
                 model_id: item.model_id,
-                supported: item.supported,
-  
-                description: item.definition.description,
-                model: item.definition.model,
-                vendor: item.definition.vendor,
-                props: item.definition.exposes,
-              }
-              console.log(device.description)
+                supported: item.supported
+              };
+              devices[device.ieee_address] = device;
             }
-          })
+          });
         }
 
         if (topic === 'bridge/event' && msg.type !== undefined) {
-          plugin.log(msg.type)
+          plugin.log(msg.type);
         }
-      }    
-    } catch {
-
+      }
+    } catch (e) {
+      plugin.log(e);
     }
-    
+
     if (topic !== 'bridge/logging') {
       this.eventBus.emitMQTTMessagePublished({
-        topic: 'zigbee2mqtt/' + topic, 
-        payload, 
-        options: {...{qos: 0, retain: false}, ...options}
+        topic: 'zigbee2mqtt/' + topic,
+        payload,
+        options: { ...{ qos: 0, retain: false }, ...options }
       });
-  
-      this.onMessage(topic, payload)
+
+      this.onMessage(topic, payload);
     } else {
       plugin.log(payload);
     }
@@ -88,30 +93,62 @@ class MQTT {
     return Promise.resolve();
   }
 
-
   onMessage(topic, message) {
     this.eventBus.emitMQTTMessage({ topic, message: message });
   }
 }
 
-
 async function main() {
-  const Controller = require('./zigbee/dist/controller');
-  controller = new Controller(restart, exit);
+  plugin.params.data = await plugin.params.get();
+  plugin.log('Received params ' + JSON.stringify(plugin.params.data));
 
-  controller.mqtt = new MQTT('main', controller.mqtt.eventBus);
-
-  controller.extensions.forEach(i => {
-    if (i.mqtt !== undefined) {
-      i.mqtt = new MQTT('service', i.mqtt.eventBus);
+  scanner = new Scanner(plugin);
+  plugin.onScan(scanObj => {
+    if (!scanObj) return;
+    if (scanObj.stop) {
+      scanner.stop();
+    } else if (scanObj.uuid) {
+      scanner.request(scanObj);
     }
-  })
+  });
 
-  await controller.start();
+  plugin.onAct(message => {
+    if (!message.data) return;
+    message.data.forEach(item => {
+      try {
+        // item =  {id: '0x00158d00054ab741_ON', value: 1, command:'set'}
+        // TODO  сформировать команду
+        plugin.log('PUBLISH command ' + util.inspect(item), 1);
+      } catch (e) {
+        const errStr = 'ERROR Act: ' + util.inspect(e) + ' /n message.data item: ' + util.inspect(item);
+        plugin.log(errStr);
+      }
+    });
+  });
 
+    // if (plugin.params.serialport) {
+    const Controller = require('./zigbee/dist/controller');
+    controller = new Controller(restart, exit);
+    controller.mqtt = new MQTT('main', controller.mqtt.eventBus);
 
+    controller.extensions.forEach(i => {
+      if (i.mqtt !== undefined) {
+        i.mqtt = new MQTT('service', i.mqtt.eventBus);
+      }
+    });
+    await controller.start();
 
+    /*
+    } else {
+      plugin.log('RUN in MOCK mode without zigbee controller!');
+      const MockController = require('./lib/mock');
+      controller = new MockController(plugin);
+      controller.mqtt = new MQTT('main', controller.eventBus);
+      devices = controller.getDevices();
+     controller.startPublish(20); // Генерировать сообщения с интервалом 2 сек
+    }
+    */
+  
 }
 
 main();
-

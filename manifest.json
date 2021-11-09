@@ -3,9 +3,14 @@
   "description": "Zigbee Plugin",
   "module": "index.js",
   "single": 1,
-  "nochannels": 1,
-  "chdefault": {
+  "nochannels": 0,
+
+  "channel_popup": {
+    "delete": true
   },
-  "ext": [
-  ]
+
+  "channel_folder_popup": {
+    "browse": { "variant": "subtree" },
+    "delete": true
+  }
 }
