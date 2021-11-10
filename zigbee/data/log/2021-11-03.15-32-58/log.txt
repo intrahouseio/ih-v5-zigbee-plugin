@@ -1,2 +1,0 @@
-info  2021-11-03 15:32:58: Logging to console and directory: '/Users/artemivanov/Documents/intra/ih-v5-zigbee-plugin/zigbee/data/log/2021-11-03.15-32-58' filename: log.txt
-info  2021-11-03 15:32:58: Starting Zigbee2MQTT version 1.22.0 (commit #d5c1031)

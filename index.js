@@ -1,11 +1,34 @@
 const util = require('util');
+const path = require('path');
+const fs = require('fs');
+const yaml = require('./zigbee/node_modules/js-yaml');
 
 const plugin = require('ih-plugin-api')();
 const Scanner = require('./lib/scanner');
 
+let isFirst = true;
+
 let controller;
 let scanner;
 let devices = {};
+
+
+function createSettings(params) {
+  plugin.log(`serial port: ${params.port}`);
+  
+  const filePath = path.join(__dirname, 'zigbee', 'data', 'configuration.yaml');
+  const settings = yaml.load(fs.readFileSync(filePath, 'utf8'));
+
+  if (settings.serial === undefined) {
+    settings.serial = {};
+  }
+
+  settings.serial.port = params.port || '/dev/tty.usbserial-0001';
+  
+
+  fs.writeFileSync(filePath, yaml.dump(settings), 'utf8');
+  return Promise.resolve();
+}
 
 async function stop(reason = null) {
   await controller.stop(reason);
@@ -18,6 +41,7 @@ async function restart() {
 
 async function exit(code, reason) {
   if (reason !== 'indexjs.restart') {
+    plugin.log('zigbee-herdsman exit (stop)');
     process.exit(0);
   }
 }
@@ -40,10 +64,8 @@ class MQTT {
   publish(topic, payload, options) {
     try {
       const msg = JSON.parse(payload);
-
       if (this.type === 'main') {
         Object.keys(msg).forEach(key => {
-          console.log('zigbee/' + topic + '/' + key + ' ' + msg[key]);
           plugin.sendData([{ id: topic + '_' + key, value: msg[key] }]);
           if (scanner.status > 0) {
             if (devices[topic]) {
@@ -55,23 +77,42 @@ class MQTT {
         });
       } else {
         if (topic === 'bridge/devices') {
+          if (isFirst) {
+            isFirst = false;
+            plugin.log('zigbee-herdsman started (resumed)');
+          }
           msg.forEach(item => {
-            if (true) {
-              const device = {
-                id: item.ieee_address,
-                title: item.model_id,
-                ieee_address: item.ieee_address,
-                manufacturer: item.manufacturer,
-                model_id: item.model_id,
-                supported: item.supported
-              };
-              devices[device.ieee_address] = device;
+            devices[item.ieee_address] = {
+              id: item.ieee_address,
+              title: item.model_id,
+              ieee_address: item.ieee_address,
+              manufacturer: item.manufacturer,
+              model_id: item.model_id,
+              supported: item.supported
+            };
+            if (item.definition && item.definition.exposes) {
+              item.definition.exposes.forEach(prop => {
+                if (prop.features) {
+                  prop.features.forEach(prop2 => {
+                    devices[item.ieee_address].props[prop2.property] = prop2;
+                  });
+                } else {
+                  devices[item.ieee_address].props[prop.property] = prop;
+                }
+              })
             }
           });
         }
-
-        if (topic === 'bridge/event' && msg.type !== undefined) {
-          plugin.log(msg.type);
+        if (topic === 'bridge/event') {
+          if (msg.type === 'device_leave') {
+            plugin.log(` Device '${msg.data.friendly_name}' left the network`)
+          }
+          if (msg.type === 'device_joined') {
+            plugin.log(` Device '${msg.data.friendly_name}' joined`)
+          }
+          if (msg.type === 'device_interview') {
+            plugin.log(` Starting interview of  '${msg.data.friendly_name}'`)
+          }
         }
       }
     } catch (e) {
@@ -86,10 +127,7 @@ class MQTT {
       });
 
       this.onMessage(topic, payload);
-    } else {
-      plugin.log(payload);
     }
-
     return Promise.resolve();
   }
 
@@ -100,14 +138,16 @@ class MQTT {
 
 async function main() {
   plugin.params.data = await plugin.params.get();
-  plugin.log('Received params ' + JSON.stringify(plugin.params.data));
 
   scanner = new Scanner(plugin);
+
   plugin.onScan(scanObj => {
     if (!scanObj) return;
     if (scanObj.stop) {
+      controller && controller.zigbee && controller.zigbee.permitJoin(false);
       scanner.stop();
     } else if (scanObj.uuid) {
+      controller && controller.zigbee && controller.zigbee.permitJoin(true);
       scanner.request(scanObj);
     }
   });
@@ -119,6 +159,24 @@ async function main() {
         // item =  {id: '0x00158d00054ab741_ON', value: 1, command:'set'}
         // TODO  сформировать команду
         plugin.log('PUBLISH command ' + util.inspect(item), 1);
+        const [id, propid] = item.id.split('_');
+
+        if (controller && controller.mqtt && devices[id] && devices[id].props && devices[id].props[propid]) {
+          if (devices[id].props[propid].access === 2 || devices[id].props[propid].access === 7) {
+            if (devices[id].props[propid].type === 'binary') {
+              controller.mqtt.onMessage({ 
+                topic: `zigbee2mqtt/${id}/set`, 
+                message: JSON.stringify({ [prop]: item.value ? devices[id].props[propid].value_on : devices[id].props[propid].value_off }) 
+              });
+          
+            } else {
+              controller.mqtt.onMessage({ 
+                topic: `zigbee2mqtt/${id}/set`, 
+                message: JSON.stringify({ [prop]: item.value }) 
+              });
+            }
+          }
+        }
       } catch (e) {
         const errStr = 'ERROR Act: ' + util.inspect(e) + ' /n message.data item: ' + util.inspect(item);
         plugin.log(errStr);
@@ -126,29 +184,22 @@ async function main() {
     });
   });
 
-    // if (plugin.params.serialport) {
-    const Controller = require('./zigbee/dist/controller');
-    controller = new Controller(restart, exit);
-    controller.mqtt = new MQTT('main', controller.mqtt.eventBus);
+  await createSettings(plugin.params.data);
 
-    controller.extensions.forEach(i => {
-      if (i.mqtt !== undefined) {
-        i.mqtt = new MQTT('service', i.mqtt.eventBus);
-      }
-    });
-    await controller.start();
+  const Controller = require('./zigbee/dist/controller');
+  controller = new Controller(restart, exit);
+  controller.mqtt = new MQTT('main', controller.mqtt.eventBus);
 
-    /*
-    } else {
-      plugin.log('RUN in MOCK mode without zigbee controller!');
-      const MockController = require('./lib/mock');
-      controller = new MockController(plugin);
-      controller.mqtt = new MQTT('main', controller.eventBus);
-      devices = controller.getDevices();
-     controller.startPublish(20); // Генерировать сообщения с интервалом 2 сек
+  controller.extensions.forEach(i => {
+    if (i.mqtt !== undefined) {
+      i.mqtt = new MQTT('service', i.mqtt.eventBus);
     }
-    */
-  
+  });
+
+  plugin.log('starting zigbee-herdsman...');
+
+  await controller.start();
 }
 
 main();
+
