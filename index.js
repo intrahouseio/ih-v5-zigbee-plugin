@@ -88,7 +88,8 @@ class MQTT {
               ieee_address: item.ieee_address,
               manufacturer: item.manufacturer,
               model_id: item.model_id,
-              supported: item.supported
+              supported: item.supported,
+              props: {},
             };
             if (item.definition && item.definition.exposes) {
               item.definition.exposes.forEach(prop => {
@@ -159,21 +160,24 @@ async function main() {
         // item =  {id: '0x00158d00054ab741_ON', value: 1, command:'set'}
         // TODO  сформировать команду
         plugin.log('PUBLISH command ' + util.inspect(item), 1);
-        const [id, propid] = item.id.split('_');
+
+        const temp = item.id.split('_');
+        const id = temp[0];
+        const propid = temp.slice(1).join('_');
 
         if (controller && controller.mqtt && devices[id] && devices[id].props && devices[id].props[propid]) {
           if (devices[id].props[propid].access === 2 || devices[id].props[propid].access === 7) {
             if (devices[id].props[propid].type === 'binary') {
-              controller.mqtt.onMessage({ 
-                topic: `zigbee2mqtt/${id}/set`, 
-                message: JSON.stringify({ [prop]: item.value ? devices[id].props[propid].value_on : devices[id].props[propid].value_off }) 
-              });
+              controller.mqtt.onMessage( 
+                `zigbee2mqtt/${id}/set`, 
+                JSON.stringify({ [propid]: item.value ? devices[id].props[propid].value_on : devices[id].props[propid].value_off }) 
+              );
           
             } else {
-              controller.mqtt.onMessage({ 
-                topic: `zigbee2mqtt/${id}/set`, 
-                message: JSON.stringify({ [prop]: item.value }) 
-              });
+              controller.mqtt.onMessage( 
+                `zigbee2mqtt/${id}/set`, 
+                JSON.stringify({ [propid]: item.value }) 
+              );
             }
           }
         }
