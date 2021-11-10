@@ -184,6 +184,10 @@ async function main() {
     });
   });
 
+  plugin.onChange('params', data => {
+    process.exit(0);
+  });
+
   await createSettings(plugin.params.data);
 
   const Controller = require('./zigbee/dist/controller');
