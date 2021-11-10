@@ -2,7 +2,7 @@
   "id": "zigbee",
   "description": "Zigbee Plugin",
   "module": "index.js",
-  "single": 1,
+  "single": 0,
   "nochannels": 0,
 
   "channel_popup": {
