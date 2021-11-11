@@ -46,6 +46,19 @@ async function exit(code, reason) {
   }
 }
 
+function getValue(id, propid, value) {
+  if (controller && controller.mqtt && devices[id] && devices[id].props && devices[id].props[propid]) {
+    if (devices[id].props[propid].type === 'binary') {
+      const values = {
+        [devices[id].props[propid].value_on]: 1,
+        [devices[id].props[propid].value_off]: 0
+      }
+      return values[value] !== undefined ? values[value] : value;
+    }
+  }
+  return value;
+}
+
 class MQTT {
   constructor(type, eventBus) {
     this.type = type;
@@ -66,10 +79,10 @@ class MQTT {
       const msg = JSON.parse(payload);
       if (this.type === 'main') {
         Object.keys(msg).forEach(key => {
-          plugin.sendData([{ id: topic + '_' + key, value: msg[key] }]);
+          plugin.sendData([{ id: topic + '_' + key, value: getValue(topic, key, msg[key]) }]);
           if (scanner.status > 0) {
             if (devices[topic]) {
-              scanner.process(devices[topic], key, msg[key]);
+              scanner.process(devices[topic], key, getValue(topic, key, msg[key]));
             } else {
               plugin.log('Not found device ' + topic + ' devices=' + util.inspect(devices));
             }
@@ -157,8 +170,6 @@ async function main() {
     if (!message.data) return;
     message.data.forEach(item => {
       try {
-        // item =  {id: '0x00158d00054ab741_ON', value: 1, command:'set'}
-        // TODO  сформировать команду
         plugin.log('PUBLISH command ' + util.inspect(item), 1);
 
         const temp = item.id.split('_');
