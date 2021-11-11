@@ -21,7 +21,7 @@
   ],
   "p5": [
     { "prop": "header_testwrite", "title": "Тест записи", "type": "header" },
-    { "prop": "testValue", "title": "Значение для записи (0/1 для бинарных команд)", "type": "input" },
+    { "prop": "testValue", "title": "Значение для записи (0/1 для бинарных команд)", "type": "input", "nosave": true },
 
     {
       "prop": "writeButton",
