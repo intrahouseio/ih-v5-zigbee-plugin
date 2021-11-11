@@ -1,7 +1,9 @@
 {
   "grid": [
     { "id": "p2", "xs": 6, "class": "main", "table": "devhard" },
-    { "id": "p3", "xs": 6, "class": "main", "table": "devhard" }
+    { "id": "p3", "xs": 6, "class": "main", "table": "devhard" },
+    { "id": "p4", "xs": 6, "class": "main", "table": "devhard" },
+    { "id": "p5", "xs": 6, "class": "main", "table": "devhard", "hide": "!data.p4.w" }
   ],
   "spacing": 4,
 
@@ -11,16 +13,22 @@
   ],
   "p3": [
     { "prop": "r", "title": "$Read", "type": "cb" },
-    { "prop": "calc", "title": "$Devhard_Calc", "type": "input", "hide": "!data.p3.r" },
+    { "prop": "calc", "title": "$Devhard_Calc", "type": "input", "hide": "!data.p3.r" }
+  ],
+  "p4": [
     { "prop": "w", "title": "$Write", "type": "cb" },
-    { "prop": "calc_out", "title": "$Devhard_Calc_Out", "type": "input", "hide": "!data.p3.w" },
+    { "prop": "calc_out", "title": "$Devhard_Calc_Out", "type": "input", "hide": "!data.p4.w" }
+  ],
+  "p5": [
+    { "prop": "header_testwrite", "title": "Тест записи", "type": "header" },
+    { "prop": "testValue", "title": "Значение для записи (0/1 для бинарных команд)", "type": "input" },
+
     {
       "prop": "writeButton",
       "title": "$doWrite",
       "type": "button",
       "command": "writetochannel",
-      "param": "write",
-      "hide": "!data.p3.w"
+      "param": "write"
     }
   ]
 }
