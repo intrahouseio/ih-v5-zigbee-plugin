@@ -133,8 +133,8 @@ class MQTT {
         if (topic === 'bridge/event') {
           if (msg.type === 'device_leave') {
             const key = msg.data.ieee_address;
+            const list = [];
             if (devices[key]) {
-              const list = [];
               Object
               .keys(devices[msg.data.ieee_address].props)
               .forEach(propid => {
