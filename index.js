@@ -90,10 +90,6 @@ class MQTT {
         });
       } else {
         if (topic === 'bridge/devices') {
-          if (isFirst) {
-            isFirst = false;
-            plugin.log('zigbee-herdsman started (resumed)');
-          }
           msg.forEach(item => {
             devices[item.ieee_address] = {
               id: item.ieee_address,
@@ -116,9 +112,34 @@ class MQTT {
               })
             }
           });
+          if (isFirst) {
+            isFirst = false;
+            const list = [];
+
+            Object
+              .keys(devices)
+              .forEach(key => {
+                Object
+                .keys(devices[key].props)
+                .forEach(propid => {
+                    list.push(key + '_' + propid);
+                });
+              });
+
+            plugin.log('zigbee-herdsman started (resumed)');
+          }
         }
         if (topic === 'bridge/event') {
           if (msg.type === 'device_leave') {
+            const key = msg.data.ieee_address;
+            if (devices[key]) {
+              const list = [];
+              Object
+              .keys(devices[msg.data.ieee_address].props)
+              .forEach(propid => {
+                  list.push(key + '_' + propid);
+              });
+            }
             plugin.log(` Device '${msg.data.friendly_name}' left the network`)
           }
           if (msg.type === 'device_joined') {
