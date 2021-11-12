@@ -122,10 +122,11 @@ class MQTT {
                 Object
                 .keys(devices[key].props)
                 .forEach(propid => {
-                    list.push(key + '_' + propid);
+                    list.push({ id: key + '_' + propid });
                 });
               });
 
+            plugin.send({ type: 'syncChannels', data: list });
             plugin.log('zigbee-herdsman started (resumed)');
           }
         }
@@ -137,9 +138,10 @@ class MQTT {
               Object
               .keys(devices[msg.data.ieee_address].props)
               .forEach(propid => {
-                  list.push(key + '_' + propid);
+                list.push({ id: key + '_' + propid });
               });
             }
+            plugin.send({ type: 'removeChannels', data: list });
             plugin.log(` Device '${msg.data.friendly_name}' left the network`)
           }
           if (msg.type === 'device_joined') {
