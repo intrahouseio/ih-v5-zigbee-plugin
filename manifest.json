@@ -1,0 +1,16 @@
+{
+  "id": "zigbee",
+  "description": "Zigbee Plugin",
+  "module": "index.js",
+  "single": 0,
+  "nochannels": 0,
+
+  "channel_popup": {
+    "delete": true
+  },
+
+  "channel_folder_popup": {
+    "browse": { "variant": "subtree" },
+    "delete": true
+  }
+}

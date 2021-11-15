@@ -1,0 +1,17 @@
+{
+  "grid": [
+    { "id": "p1", "xs": 6, "class": "main", "table": "devhard", "hide":"data.p1.chan == 'ALL'" },
+    { "id": "p2", "xs": 6, "class": "main", "table": "devhard", "hide":"data.p1.chan == 'ALL'"  }
+  ],
+  "spacing": 10,
+ 
+  "p1": [
+    { "prop": "chan", "title": "", "type": "text", "hide":"1==1" },
+    { "prop": "title", "title": "$Name", "type": "input" },
+    { "prop": "manufacturer", "title": "$manufacturer", "type": "text" },
+    { "prop": "model_id", "title": "$model_id", "type": "text" },
+    { "prop": "ieee_address", "title": "$ieee_address", "type": "text" }
+   
+  ],
+  "p2": [{ "prop": "txt", "title": "$Comment", "type": "textarea" }]
+}
