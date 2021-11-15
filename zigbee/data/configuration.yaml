@@ -15,8 +15,3 @@ advanced:
   legacy_api: false
 device_options:
   legacy: false
-devices:
-  '0x00158d00016c3dea':
-    friendly_name: '0x00158d00016c3dea'
-  '0x00158d00019c9f2b':
-    friendly_name: '0x00158d00019c9f2b'
