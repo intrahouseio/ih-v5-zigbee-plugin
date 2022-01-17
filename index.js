@@ -12,12 +12,34 @@ let controller;
 let scanner;
 let devices = {};
 
+const defsettings = {
+  homeassistant: false,
+  permit_join: false,
+  mqtt: { base_topic: 'zigbee2mqtt', server: 'mqtt://localhost' },
+  serial: { port: '/dev/tty.usbserial-0001' },
+  advanced: {
+    log_output: [ 'console' ],
+    cache_state: false,
+    cache_state_persistent: false,
+    cache_state_send_on_startup: false,
+    homeassistant_legacy_entity_attributes: false,
+    legacy_api: false
+  },
+  device_options: { legacy: false }
+};
+
 
 function createSettings(params) {
   plugin.log(`serial port: ${params.port}`);
   
+  let settings
   const filePath = path.join(__dirname, 'zigbee', 'data', 'configuration.yaml');
-  const settings = yaml.load(fs.readFileSync(filePath, 'utf8'));
+
+  if (fs.existsSync(filePath)) {
+    settings = yaml.load(fs.readFileSync(filePath, 'utf8'));
+  } else {
+    settings = defsettings;
+  }
 
   if (settings.serial === undefined) {
     settings.serial = {};
