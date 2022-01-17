@@ -1,4 +1,0 @@
-info  2022-01-17 11:43:57: Logging to console and directory: '/Users/artemivanov/Documents/intra/ih-v5-zigbee-plugin/zigbee/data/log/2022-01-17.11-43-56' filename: log.txt
-info  2022-01-17 11:43:57: Starting Zigbee2MQTT version 1.22.2 (commit #e448d26d)
-info  2022-01-17 11:43:57: Starting zigbee-herdsman (0.13.188)
-error 2022-01-17 11:43:58: Error while starting zigbee-herdsman
