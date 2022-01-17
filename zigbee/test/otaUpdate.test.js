@@ -71,9 +71,8 @@ describe('OTA update', () => {
         expect(logger.info).toHaveBeenCalledWith(`Update of 'bulb' at 0.00%`);
         expect(logger.info).toHaveBeenCalledWith(`Update of 'bulb' at 10.00%, ≈ 60 minutes remaining`);
         expect(logger.info).toHaveBeenCalledWith(`Finished update of 'bulb', from '{"dateCode":"20190101","softwareBuildID":1}' to '{"dateCode":"20190102","softwareBuildID":2}'`);
-        expect(device.save).toHaveBeenCalledTimes(1);
-        expect(device.dateCode).toBe('20190102');
-        expect(device.softwareBuildID).toBe(2);
+        expect(device.save).toHaveBeenCalledTimes(2);
+        expect(endpoint.read).toHaveBeenCalledWith('genBasic', ['dateCode', 'swBuildId'], {'sendWhenActive': false});
         expect(MQTT.publish).toHaveBeenCalledWith(
             'zigbee2mqtt/bulb',
             stringify({"update_available":false,"update":{"state":"updating","progress":0}}),
@@ -265,6 +264,28 @@ describe('OTA update', () => {
         );
     });
 
+    it('Should respond with NO_IMAGE_AVAILABLE when update available request fails', async () => {
+        const device = zigbeeHerdsman.devices.bulb;
+        device.endpoints[0].commandResponse.mockClear();
+        const data = {imageType: 12382};
+        const mapped = zigbeeHerdsmanConverters.findByDevice(device)
+        mockClear(mapped);
+        mapped.ota.isUpdateAvailable.mockImplementationOnce(() => {throw new Error('Nothing to find here')})
+        const payload = {data, cluster: 'genOta', device, endpoint: device.getEndpoint(1), type: 'commandQueryNextImageRequest', linkquality: 10};
+        logger.info.mockClear();
+        await zigbeeHerdsman.events.message(payload);
+        await flushPromises();
+        expect(mapped.ota.isUpdateAvailable).toHaveBeenCalledTimes(1);
+        expect(mapped.ota.isUpdateAvailable).toHaveBeenCalledWith(device, logger, {"imageType": 12382});
+        expect(device.endpoints[0].commandResponse).toHaveBeenCalledTimes(1);
+        expect(device.endpoints[0].commandResponse).toHaveBeenCalledWith("genOta", "queryNextImageResponse", {"status": 0x98});
+        expect(MQTT.publish).toHaveBeenCalledWith(
+            'zigbee2mqtt/bulb',
+            stringify({"update_available":false,"update":{"state":"idle"}}),
+            {retain: true, qos: 0}, expect.any(Function)
+        );
+    });
+
     it('Should check for update when device requests it and it is not available', async () => {
         const device = zigbeeHerdsman.devices.bulb;
         device.endpoints[0].commandResponse.mockClear();
@@ -350,9 +371,8 @@ describe('OTA update', () => {
         expect(logger.info).toHaveBeenCalledWith(`Update of 'bulb' at 10.00%, ≈ 60 minutes remaining`);
         expect(logger.info).toHaveBeenCalledWith(`Finished update of 'bulb', from '{"dateCode":"20190101","softwareBuildID":1}' to '{"dateCode":"20190102","softwareBuildID":2}'`);
         expect(logger.error).toHaveBeenCalledTimes(0);
-        expect(device.save).toHaveBeenCalledTimes(1);
-        expect(device.dateCode).toBe('20190102');
-        expect(device.softwareBuildID).toBe(2);
+        expect(device.save).toHaveBeenCalledTimes(2);
+        expect(endpoint.read).toHaveBeenCalledWith('genBasic', ['dateCode', 'swBuildId'], {'sendWhenActive': false});
     });
 
     it('Legacy api: Should handle when OTA update fails', async () => {

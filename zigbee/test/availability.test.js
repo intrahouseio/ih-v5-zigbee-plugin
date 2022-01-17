@@ -205,6 +205,20 @@ describe('Availability', () => {
         expect(devices.bulb_color.ping).toHaveBeenCalledTimes(0);
     });
 
+    it('Should stop pinging device when it is removed', async () => {
+        await resetExtension();
+        MQTT.publish.mockClear();
+
+        await advancedTime(utils.minutes(9));
+        expect(devices.bulb_color.ping).toHaveBeenCalledTimes(0);
+
+        MQTT.events.message('zigbee2mqtt/bridge/request/device/remove', stringify({id: "bulb_color"}));
+        await flushPromises();
+
+        await advancedTime(utils.minutes(3));
+        expect(devices.bulb_color.ping).toHaveBeenCalledTimes(0);
+    });
+
     it('Should allow to be disabled', async () => {
         settings.set(['availability'], false);
         await resetExtension();
@@ -234,13 +248,12 @@ describe('Availability', () => {
         expect(endpoint.read).toHaveBeenCalledWith('lightingColorCtrl',
             ['colorMode', 'currentX', 'currentY', 'enhancedCurrentHue', 'currentSaturation', 'colorTemperature']);
 
-        // Should stop when one request fails
         endpoint.read.mockClear();
         await zigbeeHerdsman.events.deviceAnnounce({device: devices.bulb_color});
         await flushPromises();
         endpoint.read.mockImplementationOnce(() => {throw new Error('')});
         await advancedTime(utils.seconds(3));
-        expect(endpoint.read).toHaveBeenCalledTimes(1);
+        expect(endpoint.read).toHaveBeenCalledTimes(3);
     });
 
     it('Should republish availability when device is renamed', async () => {
