@@ -39,6 +39,7 @@ function createSettings(params) {
     settings = yaml.load(fs.readFileSync(filePath, 'utf8'));
   } else {
     settings = defsettings;
+    fs.mkdirSync(path.join(__dirname, 'zigbee', 'data'));
   }
 
   if (settings.serial === undefined) {
