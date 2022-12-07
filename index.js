@@ -3,11 +3,11 @@ const path = require('path');
 const fs = require('fs');
 const yaml = require('./zigbee/node_modules/js-yaml');
 
-const plugin = require('ih-plugin-api')();
+// const plugin = require('ih-plugin-api')();
 const Scanner = require('./lib/scanner');
 
 let isFirst = true;
-
+let plugin;
 let controller;
 let scanner;
 let devices = {};
@@ -196,7 +196,23 @@ class MQTT {
   }
 }
 
+
+function getOptFromArgs() {
+  let opt;
+  try {
+    opt = JSON.parse(process.argv[2]); //
+  } catch (e) {
+    opt = {};
+  }
+  return opt;
+}
+
 async function main() {
+  
+  const opt = getOptFromArgs();
+  const pluginapi = opt && opt.pluginapi ? opt.pluginapi : 'ih-plugin-api';
+  plugin = require(pluginapi+'/index.js')();
+ 
   plugin.params.data = await plugin.params.get();
 
   scanner = new Scanner(plugin);
