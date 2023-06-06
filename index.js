@@ -100,7 +100,7 @@ class MQTT {
   publish(topic, payload, options) {
     try {
       const msg = JSON.parse(payload);
-      if (this.type === 'main') {
+      if (devices[topic]) {
         Object.keys(msg).forEach(key => {
           plugin.sendData([{ id: topic + '_' + key, value: getValue(topic, key, msg[key]) }]);
           if (scanner.status > 0) {
