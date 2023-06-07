@@ -89,7 +89,7 @@ class MQTT {
   }
 
   connect() {
-    this.publish('bridge/state', 'online', { retain: true, qos: 0 });
+    //this.publish('bridge/state', 'online', { retain: true, qos: 0 });
     return new Promise(resolve => resolve());
   }
 
