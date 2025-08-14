@@ -1,44 +1,38 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const zigbee_herdsman_converters_1 = __importDefault(require("zigbee-herdsman-converters"));
-const settings = __importStar(require("../util/settings"));
-const utils_1 = __importDefault(require("../util/utils"));
-const extension_1 = __importDefault(require("./extension"));
-class ExternalConverters extends extension_1.default {
+const zigbee_herdsman_converters_1 = require("zigbee-herdsman-converters");
+const logger_1 = __importDefault(require("../util/logger"));
+const externalJS_1 = __importDefault(require("./externalJS"));
+class ExternalConverters extends externalJS_1.default {
     constructor(zigbee, mqtt, state, publishEntityState, eventBus, enableDisableExtension, restartCallback, addExtension) {
-        super(zigbee, mqtt, state, publishEntityState, eventBus, enableDisableExtension, restartCallback, addExtension);
-        for (const definition of utils_1.default.getExternalConvertersDefinitions(settings.get())) {
-            const toAdd = { ...definition };
-            delete toAdd['homeassistant'];
-            zigbee_herdsman_converters_1.default.addDeviceDefinition(toAdd);
+        super(zigbee, mqtt, state, publishEntityState, eventBus, enableDisableExtension, restartCallback, addExtension, "converter", "external_converters");
+    }
+    async removeJS(name, _mod) {
+        (0, zigbee_herdsman_converters_1.removeExternalDefinitions)(name);
+        await this.zigbee.resolveDevicesDefinitions(true);
+    }
+    async loadJS(name, mod, newName) {
+        try {
+            (0, zigbee_herdsman_converters_1.removeExternalDefinitions)(name);
+            const definitions = Array.isArray(mod) ? mod : [mod];
+            for (const definition of definitions) {
+                definition.externalConverterName = newName ?? name;
+                (0, zigbee_herdsman_converters_1.addExternalDefinition)(definition);
+                logger_1.default.info(`Loaded external converter '${newName ?? name}'.`);
+            }
+            await this.zigbee.resolveDevicesDefinitions(true);
+        }
+        catch (error) {
+            logger_1.default.error(
+            /* v8 ignore next */
+            `Failed to load external converter '${newName ?? name}'. Check the code for syntax error and make sure it is up to date with the current Zigbee2MQTT version.`);
+            logger_1.default.warning("External converters are not meant for long term usage, but for local testing after which a pull request should be created to add out-of-the-box support for the device");
+            throw error;
         }
     }
 }
 exports.default = ExternalConverters;
-//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiZXh0ZXJuYWxDb252ZXJ0ZXJzLmpzIiwic291cmNlUm9vdCI6IiIsInNvdXJjZXMiOlsiLi4vLi4vbGliL2V4dGVuc2lvbi9leHRlcm5hbENvbnZlcnRlcnMudHMiXSwibmFtZXMiOltdLCJtYXBwaW5ncyI6Ijs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7OztBQUFBLDRGQUE2QztBQUM3QywyREFBNkM7QUFDN0MsMERBQWtDO0FBQ2xDLDREQUFvQztBQUVwQyxNQUFxQixrQkFBbUIsU0FBUSxtQkFBUztJQUNyRCxZQUFZLE1BQWMsRUFBRSxJQUFVLEVBQUUsS0FBWSxFQUFFLGtCQUFzQyxFQUN4RixRQUFrQixFQUFFLHNCQUF3RSxFQUM1RixlQUEyQixFQUFFLFlBQXFEO1FBQ2xGLEtBQUssQ0FBQyxNQUFNLEVBQUUsSUFBSSxFQUFFLEtBQUssRUFBRSxrQkFBa0IsRUFBRSxRQUFRLEVBQUUsc0JBQXNCLEVBQUUsZUFBZSxFQUFFLFlBQVksQ0FBQyxDQUFDO1FBRWhILEtBQUssTUFBTSxVQUFVLElBQUksZUFBSyxDQUFDLGdDQUFnQyxDQUFDLFFBQVEsQ0FBQyxHQUFHLEVBQUUsQ0FBQyxFQUFFLENBQUM7WUFDOUUsTUFBTSxLQUFLLEdBQUcsRUFBQyxHQUFHLFVBQVUsRUFBQyxDQUFDO1lBQzlCLE9BQU8sS0FBSyxDQUFDLGVBQWUsQ0FBQyxDQUFDO1lBQzlCLG9DQUFHLENBQUMsbUJBQW1CLENBQUMsS0FBSyxDQUFDLENBQUM7UUFDbkMsQ0FBQztJQUNMLENBQUM7Q0FDSjtBQVpELHFDQVlDIn0=
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiZXh0ZXJuYWxDb252ZXJ0ZXJzLmpzIiwic291cmNlUm9vdCI6IiIsInNvdXJjZXMiOlsiLi4vLi4vbGliL2V4dGVuc2lvbi9leHRlcm5hbENvbnZlcnRlcnMudHMiXSwibmFtZXMiOltdLCJtYXBwaW5ncyI6Ijs7Ozs7QUFFQSwyRUFBNEY7QUFFNUYsNERBQW9DO0FBQ3BDLDhEQUErQztBQUkvQyxNQUFxQixrQkFBbUIsU0FBUSxvQkFBNEI7SUFDeEUsWUFDSSxNQUFjLEVBQ2QsSUFBVSxFQUNWLEtBQVksRUFDWixrQkFBc0MsRUFDdEMsUUFBa0IsRUFDbEIsc0JBQXdFLEVBQ3hFLGVBQW9DLEVBQ3BDLFlBQXFEO1FBRXJELEtBQUssQ0FDRCxNQUFNLEVBQ04sSUFBSSxFQUNKLEtBQUssRUFDTCxrQkFBa0IsRUFDbEIsUUFBUSxFQUNSLHNCQUFzQixFQUN0QixlQUFlLEVBQ2YsWUFBWSxFQUNaLFdBQVcsRUFDWCxxQkFBcUIsQ0FDeEIsQ0FBQztJQUNOLENBQUM7SUFFUyxLQUFLLENBQUMsUUFBUSxDQUFDLElBQVksRUFBRSxJQUFhO1FBQ2hELElBQUEsc0RBQXlCLEVBQUMsSUFBSSxDQUFDLENBQUM7UUFFaEMsTUFBTSxJQUFJLENBQUMsTUFBTSxDQUFDLHlCQUF5QixDQUFDLElBQUksQ0FBQyxDQUFDO0lBQ3RELENBQUM7SUFFUyxLQUFLLENBQUMsTUFBTSxDQUFDLElBQVksRUFBRSxHQUFZLEVBQUUsT0FBZ0I7UUFDL0QsSUFBSSxDQUFDO1lBQ0QsSUFBQSxzREFBeUIsRUFBQyxJQUFJLENBQUMsQ0FBQztZQUVoQyxNQUFNLFdBQVcsR0FBRyxLQUFLLENBQUMsT0FBTyxDQUFDLEdBQUcsQ0FBQyxDQUFDLENBQUMsQ0FBQyxHQUFHLENBQUMsQ0FBQyxDQUFDLENBQUMsR0FBRyxDQUFDLENBQUM7WUFFckQsS0FBSyxNQUFNLFVBQVUsSUFBSSxXQUFXLEVBQUUsQ0FBQztnQkFDbkMsVUFBVSxDQUFDLHFCQUFxQixHQUFHLE9BQU8sSUFBSSxJQUFJLENBQUM7Z0JBRW5ELElBQUEsa0RBQXFCLEVBQUMsVUFBVSxDQUFDLENBQUM7Z0JBQ2xDLGdCQUFNLENBQUMsSUFBSSxDQUFDLDhCQUE4QixPQUFPLElBQUksSUFBSSxJQUFJLENBQUMsQ0FBQztZQUNuRSxDQUFDO1lBRUQsTUFBTSxJQUFJLENBQUMsTUFBTSxDQUFDLHlCQUF5QixDQUFDLElBQUksQ0FBQyxDQUFDO1FBQ3RELENBQUM7UUFBQyxPQUFPLEtBQUssRUFBRSxDQUFDO1lBQ2IsZ0JBQU0sQ0FBQyxLQUFLO1lBQ1Isb0JBQW9CO1lBQ3BCLHNDQUFzQyxPQUFPLElBQUksSUFBSSx5R0FBeUcsQ0FDakssQ0FBQztZQUNGLGdCQUFNLENBQUMsT0FBTyxDQUNWLHdLQUF3SyxDQUMzSyxDQUFDO1lBRUYsTUFBTSxLQUFLLENBQUM7UUFDaEIsQ0FBQztJQUNMLENBQUM7Q0FDSjtBQXpERCxxQ0F5REMifQ==

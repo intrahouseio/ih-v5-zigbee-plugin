@@ -3,7 +3,6 @@ const path = require('path');
 const fs = require('fs');
 const yaml = require('./zigbee/node_modules/js-yaml');
 
-// const plugin = require('ih-plugin-api')();
 const Scanner = require('./lib/scanner');
 
 let isFirst = true;
@@ -15,6 +14,7 @@ let devices = {};
 const defsettings = {
   homeassistant: false,
   permit_join: false,
+  frontend: { enabled: true },
   mqtt: { base_topic: 'zigbee2mqtt', server: 'mqtt://localhost' },
   serial: { port: '/dev/tty.usbserial-0001' },
   advanced: {
@@ -39,7 +39,11 @@ function createSettings(params) {
     settings = yaml.load(fs.readFileSync(filePath, 'utf8'));
   } else {
     settings = defsettings;
-    fs.mkdirSync(path.join(__dirname, 'zigbee', 'data'));
+    try {
+      fs.mkdirSync(path.join(__dirname, 'zigbee', 'data'));
+    } catch(e) {
+
+    }
   }
 
   if (settings.serial === undefined) {
@@ -82,137 +86,104 @@ function getValue(id, propid, value) {
   return value;
 }
 
-class MQTT {
-  constructor(type, eventBus) {
-    this.type = type;
-    this.eventBus = eventBus;
-  }
-
-  connect() {
-    //this.publish('bridge/state', 'online', { retain: true, qos: 0 });
-    return new Promise(resolve => resolve());
-  }
-
-  disconnect() {
-    process.exit(0);
-  }
-
-  publish(topic, payload, options) {
-    try {
-      const msg = JSON.parse(payload);
-      if (devices[topic]) {
-        Object.keys(msg).forEach(key => {
-          plugin.sendData([{ id: topic + '_' + key, value: getValue(topic, key, msg[key]) }]);
-          if (scanner.status > 0) {
-            if (devices[topic]) {
-              scanner.process(devices[topic], key, getValue(topic, key, msg[key]));
-            } else {
-              plugin.log('Not found device ' + topic + ' devices=' + util.inspect(devices));
-            }
-          }
-        });
-      } else {
-        if (topic === 'bridge/devices') {
-          msg.forEach(item => {
-            devices[item.ieee_address] = {
-              id: item.ieee_address,
-              title: item.model_id,
-              ieee_address: item.ieee_address,
-              manufacturer: item.manufacturer,
-              model_id: item.model_id,
-              supported: item.supported,
-              props: {},
-            };
-            if (item.definition && item.definition.exposes) {
-              item.definition.exposes.forEach(prop => {
-                if (prop.features) {
-                  prop.features.forEach(prop2 => {
-                    devices[item.ieee_address].props[prop2.property] = prop2;
-                  });
-                } else {
-                  devices[item.ieee_address].props[prop.property] = prop;
-                }
-              })
-            }
-          });
-          if (isFirst) {
-            isFirst = false;
-            const list = [];
-
-            Object
-              .keys(devices)
-              .forEach(key => {
-                Object
-                .keys(devices[key].props)
-                .forEach(propid => {
-                    list.push({ id: key + '_' + propid });
-                });
-              });
-
-            plugin.send({ type: 'syncChannels', data: list });
-            plugin.log('zigbee-herdsman started (resumed)');
-          }
-        }
-        if (topic === 'bridge/event') {
-          if (msg.type === 'device_leave') {
-            const key = msg.data.ieee_address;
-            const list = [];
-            if (devices[key]) {
-              Object
-              .keys(devices[msg.data.ieee_address].props)
-              .forEach(propid => {
-                list.push({ id: key + '_' + propid });
-              });
-            }
-            plugin.send({ type: 'removeChannels', data: list });
-            plugin.log(` Device '${msg.data.friendly_name}' left the network`)
-          }
-          if (msg.type === 'device_joined') {
-            plugin.log(` Device '${msg.data.friendly_name}' joined`)
-          }
-          if (msg.type === 'device_interview') {
-            plugin.log(` Starting interview of  '${msg.data.friendly_name}'`)
-          }
-        }
-      }
-    } catch (e) {
-      plugin.log(e);
-    }
-
-    if (topic !== 'bridge/logging') {
-      this.eventBus.emitMQTTMessagePublished({
-        topic: 'zigbee2mqtt/' + topic,
-        payload,
-        options: { ...{ qos: 0, retain: false }, ...options }
-      });
-
-      this.onMessage(topic, payload);
-    }
-    return Promise.resolve();
-  }
-
-  onMessage(topic, message) {
-    this.eventBus.emitMQTTMessage({ topic, message: message });
-  }
-}
-
-
 function getOptFromArgs() {
   let opt;
   try {
-    opt = JSON.parse(process.argv[2]); //
+    opt = JSON.parse(process.argv[2]);
   } catch (e) {
     opt = {};
   }
   return opt;
 }
 
+function mqttPublish(topic, payload, options) {
+  try {
+    const msg = JSON.parse(payload);
+    if (devices[topic]) {
+      Object.keys(msg).forEach(key => {
+        plugin.sendData([{ id: topic + '_' + key, value: getValue(topic, key, msg[key]) }]);
+        if (scanner.status > 0) {
+          if (devices[topic]) {
+            scanner.process(devices[topic], key, getValue(topic, key, msg[key]));
+          } else {
+            plugin.log('Not found device ' + topic + ' devices=' + util.inspect(devices));
+          }
+        }
+      });
+    } else {
+      if (topic === 'bridge/devices') {
+        msg.forEach(item => {
+          devices[item.ieee_address] = {
+            id: item.ieee_address,
+            title: item.model_id,
+            ieee_address: item.ieee_address,
+            manufacturer: item.manufacturer,
+            model_id: item.model_id,
+            supported: item.supported,
+            props: {},
+          };
+          if (item.definition && item.definition.exposes) {
+            item.definition.exposes.forEach(prop => {
+              if (prop.features) {
+                prop.features.forEach(prop2 => {
+                  devices[item.ieee_address].props[prop2.property] = prop2;
+                });
+              } else {
+                devices[item.ieee_address].props[prop.property] = prop;
+              }
+            })
+          }
+        });
+        if (isFirst) {
+          isFirst = false;
+          const list = [];
+
+          Object
+            .keys(devices)
+            .forEach(key => {
+              Object
+              .keys(devices[key].props)
+              .forEach(propid => {
+                  list.push({ id: key + '_' + propid });
+              });
+            });
+
+          plugin.send({ type: 'syncChannels', data: list });
+          plugin.log('zigbee-herdsman started (resumed)');
+        }
+      }
+      if (topic === 'bridge/event') {
+        if (msg.type === 'device_leave') {
+          const key = msg.data.ieee_address;
+          const list = [];
+          if (devices[key]) {
+            Object
+            .keys(devices[msg.data.ieee_address].props)
+            .forEach(propid => {
+              list.push({ id: key + '_' + propid });
+            });
+          }
+          plugin.send({ type: 'removeChannels', data: list });
+          plugin.log(` Device '${msg.data.friendly_name}' left the network`)
+        }
+        if (msg.type === 'device_joined') {
+          plugin.log(` Device '${msg.data.friendly_name}' joined`)
+        }
+        if (msg.type === 'device_interview') {
+          plugin.log(` Starting interview of  '${msg.data.friendly_name}'`)
+        }
+      }
+    }
+  } catch (e) {
+    plugin.log(e);
+  }
+}
+
 async function main() {
-  
   const opt = getOptFromArgs();
   const pluginapi = opt && opt.pluginapi ? opt.pluginapi : 'ih-plugin-api';
+
   plugin = require(pluginapi+'/index.js')();
- 
   plugin.params.data = await plugin.params.get();
 
   scanner = new Scanner(plugin);
@@ -220,10 +191,10 @@ async function main() {
   plugin.onScan(scanObj => {
     if (!scanObj) return;
     if (scanObj.stop) {
-      controller && controller.zigbee && controller.zigbee.permitJoin(false);
+      controller && controller.zigbee && controller.zigbee.permitJoin(0);
       scanner.stop();
     } else if (scanObj.uuid) {
-      controller && controller.zigbee && controller.zigbee.permitJoin(true);
+      controller && controller.zigbee && controller.zigbee.permitJoin(255);
       scanner.request(scanObj);
     }
   });
@@ -267,19 +238,27 @@ async function main() {
 
   await createSettings(plugin.params.data);
 
-  const Controller = require('./zigbee/dist/controller');
+  const MqttMock = require('./lib/mqtt-mock')
+  const mqttPath = path.resolve(__dirname, './zigbee/dist/mqtt.js')
+  
+  require.cache[mqttPath] = {
+    id: mqttPath,
+    filename: mqttPath,
+    loaded: true,
+    exports: MqttMock,
+  }
+
+  const { Controller } = require('./zigbee/dist/controller');
+  
   controller = new Controller(restart, exit);
-  controller.mqtt = new MQTT('main', controller.mqtt.eventBus);
-
-  controller.extensions.forEach(i => {
-    if (i.mqtt !== undefined) {
-      i.mqtt = new MQTT('service', i.mqtt.eventBus);
-    }
-  });
-
-  plugin.log('starting zigbee-herdsman...');
-
-  await controller.start();
+  controller.mqtt.setHooks(mqttPublish)
+  
+  try {
+    plugin.log('starting zigbee-herdsman...');
+    await controller.start(); 
+  } catch (e) {
+    plugin.log(e.message);
+  }
 }
 
 main();

@@ -21,215 +21,308 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const extension_1 = __importDefault(require("./extension"));
-const logger_1 = __importDefault(require("../util/logger"));
-const utils_1 = __importDefault(require("../util/utils"));
-const settings = __importStar(require("../util/settings"));
-const debounce_1 = __importDefault(require("debounce"));
+const node_assert_1 = __importDefault(require("node:assert"));
 const bind_decorator_1 = __importDefault(require("bind-decorator"));
-const retrieveOnReconnect = [
-    { keys: ['state'] },
-    { keys: ['brightness'], condition: (state) => state.state === 'ON' },
-    { keys: ['color', 'color_temp'], condition: (state) => state.state === 'ON' },
+const debounce_1 = __importDefault(require("debounce"));
+const logger_1 = __importDefault(require("../util/logger"));
+const settings = __importStar(require("../util/settings"));
+const utils_1 = __importDefault(require("../util/utils"));
+const extension_1 = __importDefault(require("./extension"));
+const RETRIEVE_ON_RECONNECT = [
+    { keys: ["state"] },
+    { keys: ["brightness"], condition: (state) => state.state === "ON" },
+    { keys: ["color", "color_temp"], condition: (state) => state.state === "ON" },
 ];
 class Availability extends extension_1.default {
-    constructor() {
-        super(...arguments);
-        this.timers = {};
-        this.availabilityCache = {};
-        this.retrieveStateDebouncers = {};
-        this.pingQueue = [];
-        this.pingQueueExecuting = false;
-    }
+    /** Mapped by IEEE address */
+    timers = new Map();
+    /** Mapped by IEEE address or Group ID */
+    lastPublishedAvailabilities = new Map();
+    /** Mapped by IEEE address */
+    pingBackoffs = new Map();
+    /** IEEE addresses, waiting for last seen changes to take them out of "availability sleep" */
+    backoffPausedDevices = new Set();
+    /** Mapped by IEEE address */
+    retrieveStateDebouncers = new Map();
+    pingQueue = [];
+    pingQueueExecuting = false;
+    stopped = false;
     getTimeout(device) {
-        var _a, _b, _c;
-        if (typeof device.options.availability === 'object' && ((_a = device.options.availability) === null || _a === void 0 ? void 0 : _a.timeout) != null) {
+        if (typeof device.options.availability === "object" && device.options.availability?.timeout != null) {
             return utils_1.default.minutes(device.options.availability.timeout);
         }
-        const key = this.isActiveDevice(device) ? 'active' : 'passive';
-        let value = (_c = (_b = settings.get().availability) === null || _b === void 0 ? void 0 : _b[key]) === null || _c === void 0 ? void 0 : _c.timeout;
-        if (value == null)
-            value = key == 'active' ? 10 : 1500;
-        return utils_1.default.minutes(value);
+        return utils_1.default.minutes(this.isActiveDevice(device) ? settings.get().availability.active.timeout : settings.get().availability.passive.timeout);
+    }
+    getMaxJitter(device) {
+        if (typeof device.options.availability === "object" && device.options.availability?.max_jitter != null) {
+            return device.options.availability.max_jitter;
+        }
+        return settings.get().availability.active.max_jitter;
+    }
+    getBackoff(device) {
+        if (typeof device.options.availability === "object" && device.options.availability?.backoff != null) {
+            return device.options.availability.backoff;
+        }
+        return settings.get().availability.active.backoff;
+    }
+    getPauseOnBackoffGt(device) {
+        if (typeof device.options.availability === "object" && device.options.availability?.pause_on_backoff_gt != null) {
+            return device.options.availability.pause_on_backoff_gt;
+        }
+        return settings.get().availability.active.pause_on_backoff_gt;
     }
     isActiveDevice(device) {
-        return (device.zh.type === 'Router' && device.zh.powerSource !== 'Battery') ||
-            device.zh.powerSource === 'Mains (single phase)';
+        return ((device.zh.type === "Router" && device.zh.powerSource !== "Battery") ||
+            (device.zh.powerSource !== undefined && device.zh.powerSource !== "Unknown" && device.zh.powerSource !== "Battery"));
     }
     isAvailable(entity) {
         if (entity.isDevice()) {
-            const ago = Date.now() - entity.zh.lastSeen;
-            return ago < this.getTimeout(entity);
+            const lastSeen = entity.zh.lastSeen ?? /* v8 ignore next */ 0;
+            return Date.now() - lastSeen < this.getTimeout(entity);
+        }
+        for (const memberDevice of entity.membersDevices()) {
+            if (this.lastPublishedAvailabilities.get(memberDevice.ieeeAddr) === true) {
+                return true;
+            }
+        }
+        return false;
+    }
+    resetTimer(device, resetBackoff = false) {
+        clearTimeout(this.timers.get(device.ieeeAddr));
+        this.removeFromPingQueue(device);
+        // If the timer triggers, the device is not available anymore otherwise resetTimer already has been called
+        if (this.isActiveDevice(device)) {
+            const backoffEnabled = this.getBackoff(device);
+            const jitter = Math.random() * this.getMaxJitter(device);
+            let backoff = 1;
+            if (resetBackoff) {
+                // always cleanup even if backoff disabled (ensures proper state if changed at runtime)
+                this.backoffPausedDevices.delete(device.ieeeAddr);
+                this.pingBackoffs.delete(device.ieeeAddr);
+            }
+            else if (backoffEnabled) {
+                backoff = this.pingBackoffs.get(device.ieeeAddr) ?? 1;
+            }
+            // never paused if was reset (just deleted) or backoff disabled, might as well skip the Set lookup
+            if (!backoffEnabled || resetBackoff || !this.backoffPausedDevices.has(device.ieeeAddr)) {
+                // If device did not check in, ping it, if that fails it will be marked as offline
+                this.timers.set(device.ieeeAddr, setTimeout(this.addToPingQueue.bind(this, device), (this.getTimeout(device) + utils_1.default.seconds(1) + jitter) * backoff));
+            }
         }
         else {
-            return entity.membersDevices().length === 0 ||
-                entity.membersDevices().map((d) => this.availabilityCache[d.ieeeAddr]).includes(true);
+            this.timers.set(device.ieeeAddr, setTimeout(this.publishAvailability.bind(this, device, true), this.getTimeout(device) + utils_1.default.seconds(1)));
         }
     }
-    resetTimer(device) {
-        clearTimeout(this.timers[device.ieeeAddr]);
-        // If the timer triggers, the device is not available anymore otherwise resetTimer already have been called
-        if (this.isActiveDevice(device)) {
-            // If device did not check in, ping it, if that fails it will be marked as offline
-            this.timers[device.ieeeAddr] = setTimeout(() => this.addToPingQueue(device), this.getTimeout(device) + utils_1.default.seconds(1));
-        }
-        else {
-            this.timers[device.ieeeAddr] = setTimeout(() => this.publishAvailability(device, true), this.getTimeout(device) + utils_1.default.seconds(1));
-        }
+    clearTimer(ieeeAddress) {
+        clearTimeout(this.timers.get(ieeeAddress));
+        this.timers.delete(ieeeAddress);
     }
     addToPingQueue(device) {
         this.pingQueue.push(device);
-        this.pingQueueExecuteNext();
+        this.pingQueueExecuteNext().catch(utils_1.default.noop);
     }
     removeFromPingQueue(device) {
         const index = this.pingQueue.findIndex((d) => d.ieeeAddr === device.ieeeAddr);
-        index != -1 && this.pingQueue.splice(index, 1);
+        if (index !== -1) {
+            this.pingQueue.splice(index, 1);
+        }
     }
     async pingQueueExecuteNext() {
-        if (this.pingQueue.length === 0 || this.pingQueueExecuting)
+        if (this.pingQueue.length === 0 || this.pingQueueExecuting) {
             return;
+        }
         this.pingQueueExecuting = true;
         const device = this.pingQueue[0];
-        let pingedSuccessfully = false;
-        const available = this.availabilityCache[device.ieeeAddr] || this.isAvailable(device);
+        let pingSuccess = false;
+        const available = this.lastPublishedAvailabilities.get(device.ieeeAddr) || this.isAvailable(device);
         const attempts = available ? 2 : 1;
-        for (let i = 0; i < attempts; i++) {
+        for (let i = 1; i <= attempts; i++) {
             try {
                 // Enable recovery if device is marked as available and first ping fails.
-                const disableRecovery = !(i == 1 && available);
-                await device.zh.ping(disableRecovery);
-                pingedSuccessfully = true;
-                logger_1.default.debug(`Successfully pinged '${device.name}' (attempt ${i + 1}/${attempts})`);
+                await device.zh.ping(!available || i !== 2);
+                pingSuccess = true;
+                logger_1.default.debug(`Successfully pinged '${device.name}' (attempt ${i}/${attempts})`);
                 break;
             }
             catch (error) {
-                logger_1.default.warn(`Failed to ping '${device.name}' (attempt ${i + 1}/${attempts}, ${error.message})`);
+                logger_1.default.warning(`Failed to ping '${device.name}' (attempt ${i}/${attempts}, ${error.message})`);
                 // Try again in 3 seconds.
-                const lastAttempt = i - 1 === attempts;
-                !lastAttempt && await utils_1.default.sleep(3);
+                if (i !== attempts) {
+                    await utils_1.default.sleep(3);
+                }
             }
         }
-        this.publishAvailability(device, !pingedSuccessfully);
-        this.resetTimer(device);
+        if (this.stopped) {
+            // Exit here to avoid triggering any follow-up activity (e.g., re-queuing another ping attempt).
+            return;
+        }
+        if (!pingSuccess && this.getBackoff(device)) {
+            const currentBackoff = this.pingBackoffs.get(device.ieeeAddr) ?? 1;
+            // setting is "greater than" but since we already did the ping, we use ">=" for comparison below (pause next)
+            const pauseOnBackoff = this.getPauseOnBackoffGt(device);
+            if (pauseOnBackoff > 0 && currentBackoff >= pauseOnBackoff) {
+                this.backoffPausedDevices.add(device.ieeeAddr);
+            }
+            else {
+                // results in backoffs: *1.5, *3, *6, *12... (with default timeout: 10, 15, 30, 60, 120)
+                this.pingBackoffs.set(device.ieeeAddr, currentBackoff * (available ? 1.5 : 2));
+            }
+        }
+        await this.publishAvailability(device, !pingSuccess);
+        this.resetTimer(device, pingSuccess);
         this.removeFromPingQueue(device);
         // Sleep 2 seconds before executing next ping
         await utils_1.default.sleep(2);
         this.pingQueueExecuting = false;
-        this.pingQueueExecuteNext();
+        await this.pingQueueExecuteNext();
     }
     async start() {
-        this.eventBus.onEntityRenamed(this, (data) => {
+        if (this.stopped) {
+            throw new Error("This extension cannot be restarted.");
+        }
+        this.eventBus.onEntityRenamed(this, async (data) => {
             if (utils_1.default.isAvailabilityEnabledForEntity(data.entity, settings.get())) {
-                this.mqtt.publish(`${data.from}/availability`, null, { retain: true, qos: 1 });
-                this.publishAvailability(data.entity, false, true);
+                await this.mqtt.publish(`${data.from}/availability`, "", { clientOptions: { retain: true, qos: 1 } });
+                await this.publishAvailability(data.entity, false, true);
             }
         });
-        this.eventBus.onDeviceRemoved(this, (data) => clearTimeout(this.timers[data.ieeeAddr]));
-        this.eventBus.onDeviceLeave(this, (data) => clearTimeout(this.timers[data.ieeeAddr]));
+        this.eventBus.onEntityRemoved(this, (data) => data.type === "device" && this.clearTimer(data.id));
+        this.eventBus.onDeviceLeave(this, (data) => this.clearTimer(data.ieeeAddr));
         this.eventBus.onDeviceAnnounce(this, (data) => this.retrieveState(data.device));
         this.eventBus.onLastSeenChanged(this, this.onLastSeenChanged);
-        this.eventBus.onPublishAvailability(this, this.publishAvailabilityForAllEntities);
         this.eventBus.onGroupMembersChanged(this, (data) => this.publishAvailability(data.group, false));
-        this.publishAvailabilityForAllEntities();
-    }
-    publishAvailabilityForAllEntities() {
-        for (const entity of [...this.zigbee.devices(false), ...this.zigbee.groups()]) {
-            if (utils_1.default.isAvailabilityEnabledForEntity(entity, settings.get())) {
-                // Publish initial availability
-                this.publishAvailability(entity, true, false, true);
-                if (entity.isDevice()) {
-                    this.resetTimer(entity);
-                    // If an active device is initially unavailable, ping it.
-                    if (this.isActiveDevice(entity) && !this.isAvailable(entity)) {
-                        this.addToPingQueue(entity);
-                    }
+        // Publish initial availability
+        await this.publishAvailabilityForAllEntities();
+        // Start availability for the devices
+        for (const device of this.zigbee.devicesIterator(utils_1.default.deviceNotCoordinator)) {
+            if (utils_1.default.isAvailabilityEnabledForEntity(device, settings.get())) {
+                this.resetTimer(device);
+                // If an active device is unavailable on start, add it to the pingqueue immediately.
+                if (this.isActiveDevice(device) && !this.isAvailable(device)) {
+                    this.addToPingQueue(device);
                 }
             }
         }
     }
-    publishAvailability(entity, logLastSeen, forcePublish = false, skipGroups = false) {
+    async publishAvailabilityForAllEntities() {
+        for (const entity of this.zigbee.devicesAndGroupsIterator(utils_1.default.deviceNotCoordinator)) {
+            if (utils_1.default.isAvailabilityEnabledForEntity(entity, settings.get())) {
+                await this.publishAvailability(entity, true, false, true);
+            }
+        }
+    }
+    async publishAvailability(entity, logLastSeen, forcePublish = false, skipGroups = false) {
         if (logLastSeen && entity.isDevice()) {
-            const ago = Date.now() - entity.zh.lastSeen;
+            const ago = Date.now() - (entity.zh.lastSeen ?? /* v8 ignore next */ 0);
             if (this.isActiveDevice(entity)) {
-                logger_1.default.debug(`Active device '${entity.name}' was last seen ` +
-                    `'${(ago / utils_1.default.minutes(1)).toFixed(2)}' minutes ago.`);
+                logger_1.default.debug(`Active device '${entity.name}' was last seen '${(ago / utils_1.default.minutes(1)).toFixed(2)}' minutes ago.`);
             }
             else {
                 logger_1.default.debug(`Passive device '${entity.name}' was last seen '${(ago / utils_1.default.hours(1)).toFixed(2)}' hours ago.`);
             }
         }
         const available = this.isAvailable(entity);
-        if (!forcePublish && this.availabilityCache[entity.ID] == available) {
+        if (!forcePublish && this.lastPublishedAvailabilities.get(entity.ID) === available) {
             return;
         }
-        if (entity.isDevice() && entity.ieeeAddr in this.availabilityCache && available &&
-            this.availabilityCache[entity.ieeeAddr] === false) {
+        if (entity.isDevice() && available && this.lastPublishedAvailabilities.get(entity.ieeeAddr) === false) {
             logger_1.default.debug(`Device '${entity.name}' reconnected`);
             this.retrieveState(entity);
         }
         const topic = `${entity.name}/availability`;
-        const payload = utils_1.default.availabilityPayload(available ? 'online' : 'offline', settings.get());
-        this.availabilityCache[entity.ID] = available;
-        this.mqtt.publish(topic, payload, { retain: true, qos: 1 });
+        const payload = { state: available ? "online" : "offline" };
+        this.lastPublishedAvailabilities.set(entity.ID, available);
+        await this.mqtt.publish(topic, JSON.stringify(payload), { clientOptions: { retain: true, qos: 1 } });
         if (!skipGroups && entity.isDevice()) {
-            this.zigbee.groups().filter((g) => g.hasMember(entity))
-                .filter((g) => utils_1.default.isAvailabilityEnabledForEntity(g, settings.get()))
-                .forEach((g) => this.publishAvailability(g, false, forcePublish));
+            for (const group of this.zigbee.groupsIterator()) {
+                if (group.hasMember(entity) && utils_1.default.isAvailabilityEnabledForEntity(group, settings.get())) {
+                    await this.publishAvailability(group, false, forcePublish);
+                }
+            }
         }
     }
-    onLastSeenChanged(data) {
+    async onLastSeenChanged(data) {
         if (utils_1.default.isAvailabilityEnabledForEntity(data.device, settings.get())) {
             // Remove from ping queue, not necessary anymore since we know the device is online.
             this.removeFromPingQueue(data.device);
-            this.resetTimer(data.device);
-            this.publishAvailability(data.device, false);
+            this.resetTimer(data.device, true);
+            await this.publishAvailability(data.device, false);
         }
     }
     async stop() {
-        Object.values(this.timers).forEach((t) => clearTimeout(t));
-        super.stop();
+        this.stopped = true;
+        this.pingQueue = [];
+        for (const [, t] of this.timers) {
+            clearTimeout(t);
+        }
+        await super.stop();
     }
     retrieveState(device) {
-        var _a, _b;
         /**
          * Retrieve state of a device in a debounced manner, this function is called on a 'deviceAnnounce' which a
          * device can send multiple times after each other.
          */
-        if (device.definition && !device.zh.interviewing && !this.retrieveStateDebouncers[device.ieeeAddr]) {
-            this.retrieveStateDebouncers[device.ieeeAddr] = (0, debounce_1.default)(async () => {
-                var _a;
+        if (device.definition && device.interviewed && !this.retrieveStateDebouncers.get(device.ieeeAddr)) {
+            this.retrieveStateDebouncers.set(device.ieeeAddr, (0, debounce_1.default)(async () => {
                 logger_1.default.debug(`Retrieving state of '${device.name}' after reconnect`);
                 // Color and color temperature converters do both, only needs to be called once.
-                for (const item of retrieveOnReconnect) {
-                    if (item.condition && this.state.get(device) && !item.condition(this.state.get(device)))
+                for (const item of RETRIEVE_ON_RECONNECT) {
+                    if (item.condition && this.state.get(device) && !item.condition(this.state.get(device))) {
                         continue;
-                    const converter = device.definition.toZigbee.find((c) => c.key.find((k) => item.keys.includes(k)));
-                    await ((_a = converter === null || converter === void 0 ? void 0 : converter.convertGet) === null || _a === void 0 ? void 0 : _a.call(converter, device.endpoint(), item.keys[0], { message: this.state.get(device), mapped: device.definition }).catch((e) => {
-                        logger_1.default.error(`Failed to read state of '${device.name}' after reconnect (${e.message})`);
-                    }));
+                    }
+                    // biome-ignore lint/style/noNonNullAssertion: doesn't change once valid
+                    const converter = device.definition.toZigbee.find((c) => !c.key || c.key.find((k) => item.keys.includes(k)));
+                    const options = device.options;
+                    const state = this.state.get(device);
+                    const meta = {
+                        message: this.state.get(device),
+                        // biome-ignore lint/style/noNonNullAssertion: doesn't change once valid
+                        mapped: device.definition,
+                        endpoint_name: undefined,
+                        options,
+                        state,
+                        device: device.zh,
+                        /* v8 ignore next */
+                        publish: (payload) => this.publishEntityState(device, payload),
+                    };
+                    try {
+                        const endpoint = device.endpoint();
+                        (0, node_assert_1.default)(endpoint);
+                        await converter?.convertGet?.(endpoint, item.keys[0], meta);
+                    }
+                    catch (error) {
+                        logger_1.default.error(`Failed to read state of '${device.name}' after reconnect (${error.message})`);
+                    }
                     await utils_1.default.sleep(500);
                 }
-            }, utils_1.default.seconds(2));
+            }, utils_1.default.seconds(2)));
         }
-        (_b = (_a = this.retrieveStateDebouncers)[device.ieeeAddr]) === null || _b === void 0 ? void 0 : _b.call(_a);
+        this.retrieveStateDebouncers.get(device.ieeeAddr)?.();
     }
 }
 exports.default = Availability;
 __decorate([
     bind_decorator_1.default
-], Availability.prototype, "publishAvailabilityForAllEntities", null);
-__decorate([
-    bind_decorator_1.default
 ], Availability.prototype, "onLastSeenChanged", null);
-//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiYXZhaWxhYmlsaXR5LmpzIiwic291cmNlUm9vdCI6IiIsInNvdXJjZXMiOlsiLi4vLi4vbGliL2V4dGVuc2lvbi9hdmFpbGFiaWxpdHkudHMiXSwibmFtZXMiOltdLCJtYXBwaW5ncyI6Ijs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7OztBQUFBLDREQUFvQztBQUNwQyw0REFBb0M7QUFDcEMsMERBQWtDO0FBQ2xDLDJEQUE2QztBQUM3Qyx3REFBZ0M7QUFDaEMsb0VBQWtDO0FBRWxDLE1BQU0sbUJBQW1CLEdBQUc7SUFDeEIsRUFBQyxJQUFJLEVBQUUsQ0FBQyxPQUFPLENBQUMsRUFBQztJQUNqQixFQUFDLElBQUksRUFBRSxDQUFDLFlBQVksQ0FBQyxFQUFFLFNBQVMsRUFBRSxDQUFDLEtBQWUsRUFBVyxFQUFFLENBQUMsS0FBSyxDQUFDLEtBQUssS0FBSyxJQUFJLEVBQUM7SUFDckYsRUFBQyxJQUFJLEVBQUUsQ0FBQyxPQUFPLEVBQUUsWUFBWSxDQUFDLEVBQUUsU0FBUyxFQUFFLENBQUMsS0FBZSxFQUFXLEVBQUUsQ0FBQyxLQUFLLENBQUMsS0FBSyxLQUFLLElBQUksRUFBQztDQUNqRyxDQUFDO0FBRUYsTUFBcUIsWUFBYSxTQUFRLG1CQUFTO0lBQW5EOztRQUNZLFdBQU0sR0FBa0MsRUFBRSxDQUFDO1FBQzNDLHNCQUFpQixHQUEyQixFQUFFLENBQUM7UUFDL0MsNEJBQXVCLEdBQThCLEVBQUUsQ0FBQztRQUN4RCxjQUFTLEdBQWEsRUFBRSxDQUFDO1FBQ3pCLHVCQUFrQixHQUFHLEtBQUssQ0FBQztJQW1NdkMsQ0FBQztJQWpNVyxVQUFVLENBQUMsTUFBYzs7UUFDN0IsSUFBSSxPQUFPLE1BQU0sQ0FBQyxPQUFPLENBQUMsWUFBWSxLQUFLLFFBQVEsSUFBSSxDQUFBLE1BQUEsTUFBTSxDQUFDLE9BQU8sQ0FBQyxZQUFZLDBDQUFFLE9BQU8sS0FBSSxJQUFJLEVBQUUsQ0FBQztZQUNsRyxPQUFPLGVBQUssQ0FBQyxPQUFPLENBQUMsTUFBTSxD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
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoiYXZhaWxhYmlsaXR5LmpzIiwic291cmNlUm9vdCI6IiIsInNvdXJjZXMiOlsiLi4vLi4vbGliL2V4dGVuc2lvbi9hdmFpbGFiaWxpdHkudHMiXSwibmFtZXMiOltdLCJtYXBwaW5ncyI6Ijs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7QUFBQSw4REFBaUM7QUFDakMsb0VBQWtDO0FBQ2xDLHdEQUFnQztBQUloQyw0REFBb0M7QUFDcEMsMkRBQTZDO0FBQzdDLDBEQUFrQztBQUNsQyw0REFBb0M7QUFFcEMsTUFBTSxxQkFBcUIsR0FBMEU7SUFDakcsRUFBQyxJQUFJLEVBQUUsQ0FBQyxPQUFPLENBQUMsRUFBQztJQUNqQixFQUFDLElBQUksRUFBRSxDQUFDLFlBQVksQ0FBQyxFQUFFLFNBQVMsRUFBRSxDQUFDLEtBQWUsRUFBVyxFQUFFLENBQUMsS0FBSyxDQUFDLEtBQUssS0FBSyxJQUFJLEVBQUM7SUFDckYsRUFBQyxJQUFJLEVBQUUsQ0FBQyxPQUFPLEVBQUUsWUFBWSxDQUFDLEVBQUUsU0FBUyxFQUFFLENBQUMsS0FBZSxFQUFXLEVBQUUsQ0FBQyxLQUFLLENBQUMsS0FBSyxLQUFLLElBQUksRUFBQztDQUNqRyxDQUFDO0FBRUYsTUFBcUIsWUFBYSxTQUFRLG1CQUFTO0lBQy9DLDZCQUE2QjtJQUNaLE1BQU0sR0FBRyxJQUFJLEdBQUcsRUFBMEIsQ0FBQztJQUM1RCx5Q0FBeUM7SUFDeEIsMkJBQTJCLEdBQUcsSUFBSSxHQUFHLEVBQTRCLENBQUM7SUFDbkYsNkJBQTZCO0lBQ1osWUFBWSxHQUFHLElBQUksR0FBRyxFQUFrQixDQUFDO0lBQzFELDZGQUE2RjtJQUM1RSxvQkFBb0IsR0FBRyxJQUFJLEdBQUcsRUFBVSxDQUFDO0lBQzFELDZCQUE2QjtJQUNaLHVCQUF1QixHQUFHLElBQUksR0FBRyxFQUFzQixDQUFDO0lBQ2pFLFNBQVMsR0FBYSxFQUFFLENBQUM7SUFDekIsa0JBQWtCLEdBQUcsS0FBSyxDQUFDO0lBQzNCLE9B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
