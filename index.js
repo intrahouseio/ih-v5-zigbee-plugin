@@ -14,7 +14,7 @@ let devices = {};
 const defsettings = {
   homeassistant: false,
   permit_join: false,
-  frontend: { enabled: true },
+  frontend: { enabled: false, port: 8080 },
   mqtt: { base_topic: 'zigbee2mqtt', server: 'mqtt://localhost' },
   serial: { port: '/dev/tty.usbserial-0001' },
   advanced: {
@@ -30,8 +30,6 @@ const defsettings = {
 
 
 function createSettings(params) {
-  plugin.log(`serial port: ${params.port}`);
-  
   let settings
   const filePath = path.join(__dirname, 'zigbee', 'data', 'configuration.yaml');
 
@@ -47,12 +45,26 @@ function createSettings(params) {
   }
 
   if (settings.serial === undefined) {
-    settings.serial = {};
+    settings.serial = {}
   }
 
-  settings.serial.port = params.port || '/dev/tty.usbserial-0001';
-  
+  if (params.useManualPort) {
+    settings.serial.port = params.manualPort || ''
+  } else {
+    settings.serial.port = params.port || '/dev/tty.usbserial-0001'
+  }
 
+  if (settings.frontend === undefined) settings.frontend = {}
+  
+  if (params.useHttp) {
+    settings.frontend.enabled = true
+    settings.frontend.port = params.httpPort || 8088
+  } else {
+     settings.frontend.enabled = false
+  }
+
+  plugin.log(`serial port: ${settings.serial.port}`);
+  
   fs.writeFileSync(filePath, yaml.dump(settings), 'utf8');
   return Promise.resolve();
 }

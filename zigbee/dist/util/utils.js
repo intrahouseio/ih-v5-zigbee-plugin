@@ -40,7 +40,7 @@ function capitalize(s) {
     return s[0].toUpperCase() + s.slice(1);
 }
 async function getZigbee2MQTTVersion(includeCommitHash = true) {
-    const packageJSON = (await import("../../package.json", { with: { type: "json" } })).default;
+    const packageJSON = (await import("../../package.json", { assert: { type: "json" } })).default;
     const version = packageJSON.version;
     let commitHash;
     if (!includeCommitHash) {
@@ -62,7 +62,7 @@ async function getZigbee2MQTTVersion(includeCommitHash = true) {
     });
 }
 async function getDependencyVersion(depend) {
-    const packageJSON = (await import(`${depend}/package.json`, { with: { type: "json" } })).default;
+    const packageJSON = (await import(`${depend}/package.json`, { assert: { type: "json" } })).default;
     return { version: packageJSON.version };
 }
 function formatDate(time, type) {

@@ -9,8 +9,11 @@
 
   "p1": [
     { "prop": "id", "title": "ID", "type": "text" },
-    { "prop": "port", "title": "COM порт", "type": "droplist", "data": "__tool.comports" }
-   
+    { "prop": "port", "title": "COM порт", "type": "droplist", "data": "__tool.comports", "hide":"data.p1.useManualPort == 1" },
+    { "prop": "useManualPort", "title": "Указать COM порт вручную", "type": "cb" },
+    { "prop": "manualPort", "title": "Пользовательский COM порт", "type": "input", "hide":"data.p1.useManualPort != 1"},
+    { "prop": "useHttp", "title": "Включить веб-интерфейс Z2M", "type": "cb" },
+    { "prop": "httpPort", "title": "Http порт Z2M", "type": "number", "default": 8080, "hide":"data.p1.useHttp != 1" }
   ],
 
   "p2": [
