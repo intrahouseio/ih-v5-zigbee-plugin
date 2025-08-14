@@ -16,7 +16,7 @@ const defsettings = {
   permit_join: false,
   frontend: { enabled: false, port: 8080 },
   mqtt: { base_topic: 'zigbee2mqtt', server: 'mqtt://localhost' },
-  serial: { port: '/dev/tty.usbserial-0001' },
+  serial: { port: '/dev/tty.usbserial-0001', adapter: 'zstack' },
   advanced: {
     log_output: [ 'console' ],
     cache_state: false,
@@ -47,6 +47,8 @@ function createSettings(params) {
   if (settings.serial === undefined) {
     settings.serial = {}
   }
+
+  settings.serial.adapter = params.adapter || 'zstack'
 
   if (params.useManualPort) {
     settings.serial.port = params.manualPort || ''
