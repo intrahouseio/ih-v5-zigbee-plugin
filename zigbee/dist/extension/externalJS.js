@@ -200,7 +200,7 @@ class ExternalJSExtension extends extension_1.default {
     async importFile(file) {
         const ext = node_path_1.default.extname(file);
         // Create the file in a temp path to bypass node module cache when importing multiple times.
-        const tmpFile = node_path_1.default.join(this.basePath, `${TMP_PREFIX}${node_path_1.default.basename(file, ext)}-${crypto.randomUUID()}${ext}`);
+        const tmpFile = node_path_1.default.join(this.basePath, `${TMP_PREFIX}${node_path_1.default.basename(file, ext)}-${require("crypto").randomUUID()}${ext}`);
         node_fs_1.default.copyFileSync(file, tmpFile);
         try {
             // Do `replaceAll("\\", "/")` to prevent issues on Windows
