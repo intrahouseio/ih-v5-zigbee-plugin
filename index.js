@@ -195,12 +195,11 @@ function mqttPublish(topic, payload, options) {
           plugin.log(` Starting interview of  '${msg.data.friendly_name}'`)
 
           if (scanner.status > 0) {
-            
             const id = msg.data.ieee_address
             let title = msg.data.ieee_address + ' - pairing...'
 
             if (devices[msg.data.ieee_address] && devices[msg.data.ieee_address].model_id) {
-              //title = devices[msg.data.ieee_address].model_id
+              title = devices[msg.data.ieee_address].model_id
             }
             
             scanner.process({ id, title }, null, null, true);
