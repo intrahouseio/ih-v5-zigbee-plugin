@@ -113,6 +113,7 @@ function getOptFromArgs() {
 function mqttPublish(topic, payload, options) {
   try {
     const msg = JSON.parse(payload);
+
     if (devices[topic]) {
       Object.keys(msg).forEach(key => {
         plugin.sendData([{ id: topic + '_' + key, value: getValue(topic, key, msg[key]) }]);
@@ -190,8 +191,20 @@ function mqttPublish(topic, payload, options) {
         if (msg.type === 'device_joined') {
           plugin.log(` Device '${msg.data.friendly_name}' joined`)
         }
-        if (msg.type === 'device_interview') {
+        if (msg.type === 'device_interview' && msg.data.status === 'started') {
           plugin.log(` Starting interview of  '${msg.data.friendly_name}'`)
+
+          if (scanner.status > 0) {
+            
+            const id = msg.data.ieee_address
+            let title = msg.data.ieee_address + ' - pairing...'
+
+            if (devices[msg.data.ieee_address] && devices[msg.data.ieee_address].model_id) {
+              //title = devices[msg.data.ieee_address].model_id
+            }
+            
+            scanner.process({ id, title }, null, null, true);
+          }
         }
       }
     }
