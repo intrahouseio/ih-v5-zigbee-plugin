@@ -60,7 +60,7 @@ function createSettings(params) {
   
   if (params.useHttp) {
     settings.frontend.enabled = true
-    settings.frontend.port = params.httpPort || 8088
+    settings.frontend.port = params.httpPort || 8080
   } else {
      settings.frontend.enabled = false
   }
@@ -146,6 +146,13 @@ function mqttPublish(topic, payload, options) {
                 devices[item.ieee_address].props[prop.property] = prop;
               }
             })
+          }
+
+          if (scanner.status > 0) {
+            for (const id in devices[item.ieee_address].props) {
+              const key = devices[item.ieee_address].props[id].property
+              scanner.process(devices[item.ieee_address], key, '');
+            }
           }
         });
         if (isFirst) {
