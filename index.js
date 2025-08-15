@@ -281,16 +281,24 @@ async function main() {
     exports: MqttMock,
   }
 
-  const { Controller } = require('./zigbee/dist/controller');
   
-  controller = new Controller(restart, exit);
-  controller.mqtt.setHooks(mqttPublish)
+
+  try {
+    const { Controller } = require('./zigbee/dist/controller');
+  
+    controller = new Controller(restart, exit);
+    controller.mqtt.setHooks(mqttPublish)
+  } catch (e) {
+    plugin.log(e.message)
+    process.exit(1)
+  }
   
   try {
-    plugin.log('starting zigbee-herdsman...');
-    await controller.start(); 
+    plugin.log('starting zigbee-herdsman...')
+    await controller.start()
   } catch (e) {
-    plugin.log(e.message);
+    plugin.log(e.message)
+    process.exit(1)
   }
 }
 
