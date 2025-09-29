@@ -4,7 +4,7 @@
     "activation": false,
     "resources": false,
     "cross": true,
-    "version":"5.5.0",
+    "version":"5.5.1",
     "clear": "zigbee/node_modules",
     "z2m": "2.6.0"
 }

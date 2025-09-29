@@ -57,6 +57,7 @@ function createSettings(params) {
   }
 
   if (settings.frontend === undefined) settings.frontend = {}
+  if (typeof settings.frontend === 'boolean') settings.frontend = {}
   
   if (params.useHttp) {
     settings.frontend.enabled = true
@@ -243,13 +244,12 @@ async function main() {
         const propid = temp.slice(1).join('_');
 
         if (controller && controller.mqtt && devices[id] && devices[id].props && devices[id].props[propid]) {
-          if (devices[id].props[propid].access === 2 || devices[id].props[propid].access === 7) {
+          if (devices[id].props[propid].access === 2 || devices[id].props[propid].access === 3 || devices[id].props[propid].access === 7) {
             if (devices[id].props[propid].type === 'binary') {
               controller.mqtt.onMessage( 
                 `zigbee2mqtt/${id}/set`, 
                 JSON.stringify({ [propid]: item.value ? devices[id].props[propid].value_on : devices[id].props[propid].value_off }) 
               );
-          
             } else {
               controller.mqtt.onMessage( 
                 `zigbee2mqtt/${id}/set`, 
